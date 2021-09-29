@@ -1,6 +1,6 @@
 #!/bin/bash
 
 systemctl restart mysql
-systemctl restart isucon.golang
+systemctl restart web-golang
 systemctl restart nginx 
 
