@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gorilla/mux"
@@ -48,16 +49,36 @@ type Reservation struct {
 	CreatedAt  time.Time `db:"created_at" json:"created_at"`
 }
 
+var foundUsers sync.Map
+
+func getUserFromCache(ctx context.Context, uid string) (*User, error) {
+	val, found := foundUsers.Load(uid)
+	if found {
+		return val.(*User), nil
+	}
+
+	row := db.QueryRowxContext(ctx, "SELECT * FROM `users` WHERE `id` = ? LIMIT 1", uid)
+	user := &User{}
+	if err := row.StructScan(user); err != nil {
+		return nil, err
+	}
+
+	foundUsers.Store(uid, user)
+
+	return user, nil
+}
+
 func getCurrentUser(r *http.Request) *User {
 	uidCookie, err := r.Cookie("user_id")
 	if err != nil || uidCookie == nil {
 		return nil
 	}
-	row := db.QueryRowxContext(r.Context(), "SELECT * FROM `users` WHERE `id` = ? LIMIT 1", uidCookie.Value)
-	user := &User{}
-	if err := row.StructScan(user); err != nil {
+
+	user, err := getUserFromCache(r.Context(), uidCookie.Value)
+	if err != nil {
 		return nil
 	}
+
 	return user
 }
 
@@ -120,8 +141,8 @@ func getReservationsCount(r *http.Request, s *Schedule) error {
 }
 
 func getUser(r *http.Request, id string) *User {
-	user := &User{}
-	if err := db.QueryRowxContext(r.Context(), "SELECT * FROM `users` WHERE `id` = ? LIMIT 1", id).StructScan(user); err != nil {
+	user, err := getUserFromCache(r.Context(), id)
+	if err != nil {
 		return nil
 	}
 	if getCurrentUser(r) != nil && !getCurrentUser(r).Staff {
