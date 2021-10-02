@@ -180,7 +180,7 @@ func serveMux() http.Handler {
 
 	router.PathPrefix("/").HandlerFunc(htmlHandler)
 
-	return logger(router)
+	return router
 }
 
 func logger(handler http.Handler) http.Handler {
