@@ -18,7 +18,7 @@ for i in 1; do
   rsync -av webapp/golang/bin/webapp ${HOST}:~/webapp/golang/bin/webapp
   rsync -av --rsync-path="sudo rsync" conf/nginx.conf ${HOST}:/etc/nginx/nginx.conf
   rsync -av --rsync-path="sudo rsync" conf/mysqld.cnf ${HOST}:/etc/mysql/mysql.conf.d/mysqld.cnf
-  # rsync -av webapp/sql/ ${HOST}:~/webapp/sql/
+  rsync -av webapp/sql/ ${HOST}:~/webapp/sql/
   ssh ${HOST} "sudo systemctl start mysql.service web-golang.service nginx.service"
 done
 
