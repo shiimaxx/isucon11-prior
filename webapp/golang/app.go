@@ -330,19 +330,18 @@ func createScheduleHandler(w http.ResponseWriter, r *http.Request) {
 		title := r.PostFormValue("title")
 		capacity, _ := strconv.Atoi(r.PostFormValue("capacity"))
 
+		createdAt := time.Now()
 		if _, err := tx.ExecContext(
 			ctx,
-			"INSERT INTO `schedules` (`id`, `title`, `capacity`, `created_at`) VALUES (?, ?, ?, NOW(6))",
-			id, title, capacity,
+			"INSERT INTO `schedules` (`id`, `title`, `capacity`, `created_at`) VALUES (?, ?, ?, ?)",
+			id, title, capacity, createdAt,
 		); err != nil {
-			return err
-		}
-		if err := tx.QueryRowContext(ctx, "SELECT `created_at` FROM `schedules` WHERE `id` = ?", id).Scan(&schedule.CreatedAt); err != nil {
 			return err
 		}
 		schedule.ID = id
 		schedule.Title = title
 		schedule.Capacity = capacity
+		schedule.CreatedAt = createdAt
 
 		return nil
 	})
@@ -377,13 +376,12 @@ func createReservationHandler(w http.ResponseWriter, r *http.Request) {
 			return sendErrorJSON(w, fmt.Errorf("schedule not found"), 403)
 		}
 
-		found := 0
-		tx.QueryRowContext(ctx, "SELECT 1 FROM `users` WHERE `id` = ? LIMIT 1", userID).Scan(&found)
-		if found != 1 {
+		_, err = getUserFromCache(r.Context(), userID)
+		if err != nil {
 			return sendErrorJSON(w, fmt.Errorf("user not found"), 403)
 		}
 
-		found = 0
+		found := 0
 		tx.QueryRowContext(ctx, "SELECT 1 FROM `reservations` WHERE `schedule_id` = ? AND `user_id` = ? LIMIT 1", scheduleID, userID).Scan(&found)
 		if found == 1 {
 			return sendErrorJSON(w, fmt.Errorf("already taken"), 403)
