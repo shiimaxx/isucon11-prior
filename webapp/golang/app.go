@@ -370,13 +370,14 @@ func createReservationHandler(w http.ResponseWriter, r *http.Request) {
 		scheduleID := r.PostFormValue("schedule_id")
 		userID := getCurrentUser(r).ID
 
-		found := 0
-		tx.QueryRowContext(ctx, "SELECT 1 FROM `schedules` WHERE `id` = ? LIMIT 1 FOR UPDATE", scheduleID).Scan(&found)
-		if found != 1 {
+		schedule := &Schedule{}
+
+		err := tx.GetContext(ctx, schedule, "SELECT * FROM `schedules` WHERE `id` = ? LIMIT 1 FOR UPDATE", scheduleID)
+		if err != nil {
 			return sendErrorJSON(w, fmt.Errorf("schedule not found"), 403)
 		}
 
-		found = 0
+		found := 0
 		tx.QueryRowContext(ctx, "SELECT 1 FROM `users` WHERE `id` = ? LIMIT 1", userID).Scan(&found)
 		if found != 1 {
 			return sendErrorJSON(w, fmt.Errorf("user not found"), 403)
@@ -388,36 +389,19 @@ func createReservationHandler(w http.ResponseWriter, r *http.Request) {
 			return sendErrorJSON(w, fmt.Errorf("already taken"), 403)
 		}
 
-		capacity := 0
-		if err := tx.QueryRowContext(ctx, "SELECT `capacity` FROM `schedules` WHERE `id` = ? LIMIT 1", scheduleID).Scan(&capacity); err != nil {
-			return sendErrorJSON(w, err, 500)
-		}
-
-		rows, err := tx.QueryContext(ctx, "SELECT * FROM `reservations` WHERE `schedule_id` = ?", scheduleID)
-		if err != nil && err != sql.ErrNoRows {
-			return sendErrorJSON(w, err, 500)
-		}
-		reserved := 0
-		for rows.Next() {
-			reserved++
-		}
-
-		if reserved >= capacity {
+		if schedule.Reserved >= schedule.Capacity {
 			return sendErrorJSON(w, fmt.Errorf("capacity is already full"), 403)
 		}
 
+		createdAt := time.Now()
 		if _, err := tx.ExecContext(
 			ctx,
-			"INSERT INTO `reservations` (`id`, `schedule_id`, `user_id`, `created_at`) VALUES (?, ?, ?, NOW(6))",
-			id, scheduleID, userID,
+			"INSERT INTO `reservations` (`id`, `schedule_id`, `user_id`, `created_at`) VALUES (?, ?, ?, ?)",
+			id, scheduleID, userID, createdAt,
 		); err != nil {
 			return err
 		}
 
-		var createdAt time.Time
-		if err := tx.QueryRowContext(ctx, "SELECT `created_at` FROM `reservations` WHERE `id` = ?", id).Scan(&createdAt); err != nil {
-			return err
-		}
 		reservation.ID = id
 		reservation.ScheduleID = scheduleID
 		reservation.UserID = userID
